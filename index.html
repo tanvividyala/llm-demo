@@ -665,6 +665,66 @@
       letter-spacing: 0.1em;
     }
 
+    /* ══════════════════════════════
+       RESOURCES
+    ══════════════════════════════ */
+    .resource-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .resource-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 1.25rem;
+      padding: 1.4rem 1.5rem;
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 4px 20px rgba(46,64,40,0.08);
+      text-decoration: none;
+      color: var(--green-dark);
+      transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+      border: 1.5px solid transparent;
+    }
+    .resource-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(46,64,40,0.12);
+      border-color: var(--sage-light);
+    }
+    .resource-icon {
+      font-size: 2rem;
+      flex-shrink: 0;
+      line-height: 1;
+      margin-top: 0.15rem;
+    }
+    .resource-body { flex: 1; }
+    .resource-tag {
+      display: inline-block;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--peach);
+      background: var(--peach-light);
+      border-radius: 20px;
+      padding: 0.15rem 0.55rem;
+      margin-bottom: 0.45rem;
+    }
+    .resource-title {
+      font-family: 'Cooper Md BT', serif;
+      font-size: 1.15rem;
+      line-height: 1.2;
+      margin-bottom: 0.4rem;
+    }
+    .resource-desc {
+      font-size: 0.88rem;
+      opacity: 0.75;
+      margin: 0;
+      max-width: none;
+      line-height: 1.55;
+    }
+
     /* ── FOOTER ── */
     footer {
       text-align: center;
@@ -692,6 +752,7 @@
   <a href="#" class="nav-slide-link" data-slide="3">Neural Nets</a>
   <a href="#" class="nav-slide-link" data-slide="4">Transformers</a>
   <a href="#" class="nav-slide-link" data-slide="5">RLHF</a>
+  <a href="#" class="nav-slide-link" data-slide="6">Resources</a>
 </nav>
 
 <div class="slides-outer" id="slides-outer">
@@ -858,6 +919,34 @@
         </div>
       </div>
     </section>
+  </div>
+
+  <!-- ═══ SLIDE 6 · RESOURCES ═══ -->
+  <div class="slide" data-slide="6">
+    <section id="resources" class="section-wrap">
+      <div class="section-label">Further Reading</div>
+      <h2>Keep Exploring</h2>
+      <p>These resources go deeper on the ideas covered here — one builds visual intuition from scratch, the other distills 20 key AI concepts in plain language.</p>
+
+      <div class="resource-list">
+        <a class="resource-card" href="https://www.youtube.com/watch?v=LPZh9BOjkQs&amp;vl=en" target="_blank" rel="noopener">
+          <div class="resource-icon">🎥</div>
+          <div class="resource-body">
+            <div class="resource-tag">Video · 19 min</div>
+            <div class="resource-title">But what is a neural network?</div>
+            <p class="resource-desc">3Blue1Brown's visual walkthrough of how neural networks work — from first principles, no math background needed.</p>
+          </div>
+        </a>
+        <a class="resource-card" href="https://blog.algomaster.io/p/20-ai-concepts-explained-simply?hide_intro_popup=true" target="_blank" rel="noopener">
+          <div class="resource-icon">📖</div>
+          <div class="resource-body">
+            <div class="resource-tag">Article</div>
+            <div class="resource-title">20 AI Concepts Explained Simply</div>
+            <p class="resource-desc">AlgoMaster's quick-reference guide to 20 foundational AI and ML ideas — tokens, temperature, RAG, fine-tuning, and more in plain English.</p>
+          </div>
+        </a>
+      </div>
+    </section>
     <footer>Built for COGS 9 · How LLMs Work</footer>
   </div>
 
@@ -872,6 +961,7 @@
     <button class="slide-dot" data-slide="3"></button>
     <button class="slide-dot" data-slide="4"></button>
     <button class="slide-dot" data-slide="5"></button>
+    <button class="slide-dot" data-slide="6"></button>
   </div>
   <button class="slide-btn" id="btn-slide-next">Next →</button>
 </div>
@@ -1041,35 +1131,17 @@
 
   function renderDiagram() {
     diagram.innerHTML = '';
-    LAYERS.forEach((layer, li) => {
-      if (li > 0) {
-        const prev = LAYERS[li - 1];
-        const edgeWrap = document.createElement('div');
-        edgeWrap.className = 'nn-edges';
-        const svgH = Math.max(prev.nodes, layer.nodes) * NODE_GAP + NODE_R * 2;
-        const edgeSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        edgeSvg.setAttribute('viewBox', `0 0 ${LAYER_GAP} ${svgH}`);
-        edgeSvg.style.height = svgH + 'px';
-        const prevY = (svgH - (prev.nodes - 1) * NODE_GAP) / 2 + NODE_R;
-        const currY = (svgH - (layer.nodes - 1) * NODE_GAP) / 2 + NODE_R;
-        for (let pi = 0; pi < prev.nodes; pi++) {
-          for (let ci = 0; ci < layer.nodes; ci++) {
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', 0);          line.setAttribute('y1', prevY + pi * NODE_GAP);
-            line.setAttribute('x2', LAYER_GAP);  line.setAttribute('y2', currY + ci * NODE_GAP);
-            const isActive = activeLayer === li || activeLayer === li - 1;
-            line.setAttribute('stroke', isActive ? '#f1a97a' : '#c8d6c9');
-            line.setAttribute('stroke-width', isActive ? '1.5' : '1');
-            line.setAttribute('opacity', isActive ? '0.7' : '0.4');
-            edgeSvg.appendChild(line);
-          }
-        }
-        edgeWrap.appendChild(edgeSvg);
-        diagram.appendChild(edgeWrap);
-      }
+    diagram.style.gap = LAYER_GAP + 'px';
+    diagram.style.position = 'relative';
 
+    const nodeEls = [];
+
+    LAYERS.forEach((layer, li) => {
       const col = document.createElement('div');
       col.className = 'nn-layer';
+      col.style.position = 'relative';
+      col.style.zIndex = '1';
+      const colNodes = [];
       for (let ni = 0; ni < layer.nodes; ni++) {
         const node = document.createElement('div');
         node.className = 'nn-node';
@@ -1081,12 +1153,40 @@
           renderDiagram();
         });
         col.appendChild(node);
+        colNodes.push(node);
       }
       const lbl = document.createElement('div');
       lbl.className = 'nn-layer-label';
       lbl.textContent = layer.label;
       col.appendChild(lbl);
       diagram.appendChild(col);
+      nodeEls.push(colNodes);
+    });
+
+    requestAnimationFrame(() => {
+      const diagRect = diagram.getBoundingClientRect();
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible';
+      diagram.insertBefore(svg, diagram.firstChild);
+
+      for (let li = 1; li < LAYERS.length; li++) {
+        const isActive = activeLayer === li || activeLayer === li - 1;
+        nodeEls[li - 1].forEach(pn => {
+          nodeEls[li].forEach(cn => {
+            const pr = pn.getBoundingClientRect();
+            const cr = cn.getBoundingClientRect();
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', (pr.left + pr.right)  / 2 - diagRect.left);
+            line.setAttribute('y1', (pr.top  + pr.bottom) / 2 - diagRect.top);
+            line.setAttribute('x2', (cr.left + cr.right)  / 2 - diagRect.left);
+            line.setAttribute('y2', (cr.top  + cr.bottom) / 2 - diagRect.top);
+            line.setAttribute('stroke',       isActive ? '#f1a97a' : '#c8d6c9');
+            line.setAttribute('stroke-width', isActive ? '1.5'    : '1');
+            line.setAttribute('opacity',      isActive ? '0.7'    : '0.4');
+            svg.appendChild(line);
+          });
+        });
+      }
     });
   }
 
