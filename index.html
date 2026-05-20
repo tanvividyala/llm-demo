@@ -824,7 +824,7 @@
       <h2>The Building Block</h2>
       <p>LLMs are a type of <strong>neural network</strong>, a computational model loosely inspired by how neurons in the brain connect and signal each other. A neural network takes some input, passes it through layers of simple mathematical operations called <strong>neurons</strong>, and produces an output.</p>
       <p>Each neuron takes a weighted sum of its inputs, applies a nonlinear function, and passes the result forward. The network "learns" by adjusting those weights during training so its outputs get closer to the correct answers. Stack enough layers, train on enough data, and the network can learn surprisingly complex patterns.</p>
-      <p>LLMs take this idea to an extreme scale: hundreds of layers, billions of parameters (weights), and training data spanning most of the written internet. The input to each layer is a word embedding, like the ones in Section 2. The specific architecture LLMs use is called the <strong>transformer</strong>, covered in Section 4.</p>
+      <p>LLMs take this idea to an extreme scale: hundreds of layers, billions of parameters (weights), and training data spanning most of the written internet. The input to each layer is a word embedding — a numeric vector representing the meaning of a word. The specific architecture LLMs use is called the <strong>transformer</strong>, which introduces a mechanism for modeling relationships across an entire sequence of words at once.</p>
 
       <div class="demo-card">
         <div class="demo-label">Visual · Feedforward Neural Network</div>
