@@ -1,0 +1,1550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How LLMs Work</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    @font-face {
+      font-family: 'Cooper Md BT';
+      src: url('Cooper Md BT Medium.ttf') format('truetype');
+      font-weight: 500;
+      font-style: normal;
+      font-display: swap;
+    }
+
+    :root {
+      --cream:       #fbf6e9;
+      --cream-dark:  #f3ecd7;
+      --green-dark:  #2f3a26;
+      --red:         #d85455;
+      --sage:        #91ad94;
+      --sage-light:  #c8d6c9;
+      --peach:       #f1a97a;
+      --peach-light: #f9d4ba;
+      --blue:        #5b8fc9;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { height: 100%; overflow: hidden; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--cream);
+      color: var(--green-dark);
+      line-height: 1.65;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── SLIDE SYSTEM ── */
+    .slides-outer {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      opacity: 0;
+      transform: translateX(32px);
+      transition: opacity 0.32s ease, transform 0.32s ease;
+      pointer-events: none;
+    }
+
+    .slide.active {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+
+    .slide.slide-exit {
+      opacity: 0;
+      transform: translateX(-32px);
+      transition: opacity 0.32s ease, transform 0.32s ease;
+    }
+
+    /* ── SLIDE NAV BAR ── */
+    .slide-nav-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 2rem;
+      background: rgba(251,246,233,0.96);
+      backdrop-filter: blur(8px);
+      border-top: 1px solid var(--sage-light);
+      z-index: 200;
+    }
+
+    .slide-btn {
+      background: transparent;
+      border: 1.5px solid var(--sage-light);
+      border-radius: 20px;
+      padding: 0.38rem 1.1rem;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.84rem;
+      font-weight: 500;
+      color: var(--green-dark);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+    }
+    .slide-btn:hover:not(:disabled) { background: var(--cream-dark); border-color: var(--sage); }
+    .slide-btn:disabled { opacity: 0.22; cursor: default; }
+
+    .slide-dots {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .slide-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--sage-light);
+      cursor: pointer;
+      border: none;
+      padding: 0;
+      transition: background 0.2s, transform 0.2s;
+    }
+    .slide-dot.active { background: var(--peach); transform: scale(1.45); }
+
+    /* ── NAV ── */
+    nav {
+      flex-shrink: 0;
+      background: rgba(251,246,233,0.96);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--sage-light);
+      display: flex;
+      justify-content: center;
+      gap: 0.25rem;
+      padding: 0.6rem 2rem;
+      flex-wrap: wrap;
+      z-index: 100;
+    }
+    nav a {
+      text-decoration: none;
+      color: var(--green-dark);
+      font-size: 0.82rem;
+      font-weight: 500;
+      padding: 0.3rem 0.75rem;
+      border-radius: 20px;
+      opacity: 0.65;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    nav a:hover { opacity: 1; background: var(--cream-dark); }
+    nav a.active { opacity: 1; background: var(--cream-dark); }
+
+    /* ── LAYOUT ── */
+    .section-wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 5.5rem 2rem 4rem;
+    }
+    .divider {
+      height: 1px;
+      max-width: 860px;
+      margin: 0 auto;
+      background: linear-gradient(to right, transparent, var(--sage-light), transparent);
+    }
+
+    /* ── TYPOGRAPHY ── */
+    .section-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--red);
+      margin-bottom: 0.6rem;
+    }
+    h1 {
+      font-family: 'Cooper Md BT', serif;
+      font-size: clamp(2.8rem, 6vw, 4.5rem);
+      line-height: 1.08;
+      color: var(--green-dark);
+    }
+    h2 {
+      font-family: 'Cooper Md BT', serif;
+      font-size: clamp(1.8rem, 4vw, 2.4rem);
+      color: var(--green-dark);
+      margin-bottom: 1rem;
+    }
+    p {
+      font-size: 1rem;
+      max-width: 64ch;
+      opacity: 0.85;
+      margin-bottom: 0.85rem;
+    }
+    strong { font-weight: 600; opacity: 1; }
+
+    /* ── HERO ── */
+    .slide[data-slide="0"] {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #hero {
+      text-align: center;
+      padding: 3rem 2rem;
+    }
+    #hero h1 { margin-bottom: 1.25rem; }
+    #hero p  { margin: 0 auto 2.5rem; font-size: 1.1rem; }
+    .slide[data-slide="0"].active {
+      display: flex;
+    }
+    .scroll-hint {
+      color: var(--sage);
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      animation: bounce 2s infinite;
+    }
+    @keyframes bounce {
+      0%,100% { transform: translateY(0); }
+      50%      { transform: translateY(4px); }
+    }
+
+    /* ── DEMO CARD ── */
+    .demo-card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 1.75rem;
+      box-shadow: 0 4px 20px rgba(46,64,40,0.08);
+      margin-top: 2.5rem;
+    }
+    .demo-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      font-weight: 400;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--sage);
+      margin-bottom: 1.25rem;
+    }
+
+    /* ── BUTTONS ── */
+    .btn {
+      background: var(--peach);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.55rem 1.25rem;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.88rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn:hover  { background: #bf7248; }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { background: var(--sage-light); cursor: default; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--peach);
+      border: 1.5px solid var(--peach);
+    }
+    .btn-ghost:hover { background: var(--peach-light); }
+
+    /* ══════════════════════════════
+       PRE-TRAINING
+    ══════════════════════════════ */
+    .sentence-display {
+      font-size: 1.25rem;
+      padding: 1rem 1.25rem;
+      background: var(--cream);
+      border-radius: 8px;
+      border-left: 3.5px solid var(--peach);
+      margin-bottom: 1.25rem;
+      min-height: 3.2rem;
+      line-height: 1.6;
+    }
+    .new-word {
+      color: var(--peach);
+      font-weight: 600;
+    }
+    .cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1.1em;
+      background: var(--peach);
+      vertical-align: text-bottom;
+      animation: blink 1s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    .prob-title {
+      font-size: 0.8rem;
+      font-weight: 500;
+      opacity: 0.55;
+      margin-bottom: 0.65rem;
+    }
+    .prob-bars { display: flex; flex-direction: column; gap: 0.45rem; margin-bottom: 1.5rem; }
+    .prob-row  { display: flex; align-items: center; gap: 0.75rem; }
+    .prob-word { width: 68px; font-size: 0.88rem; font-weight: 500; text-align: right; flex-shrink: 0; }
+    .prob-bar-bg {
+      flex: 1;
+      height: 26px;
+      background: var(--cream);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .prob-fill {
+      height: 100%;
+      border-radius: 5px;
+      background: var(--sage-light);
+      display: flex;
+      align-items: center;
+      padding-left: 0.55rem;
+      transition: width 0.5s cubic-bezier(.4,0,.2,1);
+    }
+    .prob-fill.top { background: var(--peach); }
+    .prob-fill.second { background: var(--sage); }
+    .prob-pct { font-size: 0.72rem; color: #fff; font-weight: 600; }
+    .pretrain-btns { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+    /* ══════════════════════════════
+       EMBEDDINGS
+    ══════════════════════════════ */
+    #embed-svg {
+      width: 100%;
+      height: 360px;
+      background: var(--cream);
+      border-radius: 10px;
+      display: block;
+    }
+    .embed-legend {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.9rem;
+    }
+    .embed-legend-item {
+      display: flex; align-items: center; gap: 0.4rem;
+      font-size: 0.8rem;
+    }
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .analogy-box {
+      margin-top: 1.25rem;
+      padding: 0.9rem 1.25rem;
+      background: var(--cream);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .analogy-box .chip {
+      background: var(--peach-light);
+      color: var(--green-dark);
+      border-radius: 20px;
+      padding: 0.2rem 0.65rem;
+      font-weight: 600;
+      font-size: 0.88rem;
+    }
+    .analogy-box .op { opacity: 0.5; font-size: 0.95rem; }
+    .analogy-box .result {
+      background: var(--peach);
+      color: #fff;
+      border-radius: 20px;
+      padding: 0.2rem 0.65rem;
+      font-weight: 600;
+      font-size: 0.88rem;
+    }
+
+    /* ══════════════════════════════
+       TRANSFORMERS
+    ══════════════════════════════ */
+    .sent-toggle {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .tog {
+      background: var(--cream);
+      border: 1.5px solid var(--sage-light);
+      border-radius: 8px;
+      padding: 0.45rem 1rem;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.84rem;
+      cursor: pointer;
+      color: var(--green-dark);
+      transition: all 0.15s;
+    }
+    .tog.active { background: var(--peach); color: #fff; border-color: var(--peach); }
+
+    .tokens-wrap { display: flex; gap: 0.45rem; flex-wrap: wrap; margin-bottom: 0.25rem; }
+    .token {
+      padding: 0.38rem 0.85rem;
+      border-radius: 20px;
+      font-size: 0.92rem;
+      font-weight: 500;
+      background: var(--cream-dark);
+      color: var(--green-dark);
+      cursor: pointer;
+      transition: all 0.15s;
+      border: 2px solid transparent;
+      user-select: none;
+    }
+    .token:hover     { border-color: var(--peach); }
+    .token.focus     { background: var(--peach); color: #fff; }
+    .token.attending { background: var(--sage-light); border-color: var(--sage); }
+    .token.dim       { opacity: 0.3; }
+
+    .attn-svg-wrap { position: relative; width: 100%; height: 120px; pointer-events: none; }
+    #attn-svg { width: 100%; height: 120px; overflow: visible; }
+
+    .attn-explain {
+      margin-top: 0.75rem;
+      padding: 0.85rem 1rem;
+      background: var(--cream);
+      border-radius: 8px;
+      font-size: 0.88rem;
+      min-height: 2.5rem;
+      transition: opacity 0.2s;
+    }
+
+    /* ══════════════════════════════
+       RLHF
+    ══════════════════════════════ */
+    .rlhf-pipeline {
+      display: grid;
+      grid-template-columns: 1fr 28px 1fr 28px 1fr 28px 1fr;
+      align-items: center;
+      gap: 0.1rem;
+      margin-bottom: 1.5rem;
+    }
+    .pipeline-step {
+      background: var(--cream);
+      border-radius: 12px;
+      padding: 1.1rem 0.75rem;
+      text-align: center;
+      border: 2px solid var(--sage-light);
+      transition: all 0.3s;
+    }
+    .pipeline-step.active {
+      border-color: var(--peach);
+      background: #fff;
+      box-shadow: 0 4px 14px rgba(212,132,90,0.18);
+      transform: translateY(-2px);
+    }
+    .step-icon  { font-size: 1.8rem; margin-bottom: 0.35rem; }
+    .step-name  { font-size: 0.78rem; font-weight: 600; margin-bottom: 0.2rem; }
+    .step-desc  { font-size: 0.68rem; opacity: 0.65; line-height: 1.4; }
+    .pipeline-arrow { text-align: center; font-size: 1.1rem; color: var(--sage); }
+
+    .rlhf-step-btns { display: flex; gap: 0.6rem; align-items: center; margin-bottom: 2rem; }
+    .step-caption {
+      font-size: 0.88rem;
+      opacity: 0.7;
+      font-style: italic;
+    }
+
+    .h3h-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1rem;
+    }
+    .h3h-card {
+      padding: 1.25rem;
+      border-radius: 10px;
+      background: var(--cream);
+      border-top: 3px solid var(--sage);
+    }
+    .h3h-card.harmless { border-top-color: var(--red); }
+    .h3h-card.honest   { border-top-color: var(--blue); }
+    .h3h-title { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.35rem; }
+    .h3h-desc  { font-size: 0.78rem; opacity: 0.75; line-height: 1.5; margin: 0; }
+
+    /* ══════════════════════════════
+       NEURAL NETS
+    ══════════════════════════════ */
+    .nn-word-select {
+      display: flex;
+      gap: 0.4rem;
+      margin-bottom: 0.25rem;
+    }
+    .nn-row-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 1.25rem 0 0.5rem;
+    }
+    .nn-diagram {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+    .nn-layer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .nn-layer-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.62rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--sage);
+      margin-top: 0.75rem;
+    }
+    .nn-node {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--cream-dark);
+      border: 2px solid var(--sage-light);
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .nn-node.active { background: var(--peach); border-color: var(--peach); }
+    .nn-node.output { background: var(--red); border-color: var(--red); }
+    .nn-edges {
+      flex: 1;
+      min-width: 36px;
+      max-width: 60px;
+    }
+    .nn-edges svg { width: 100%; display: block; }
+
+    .nn-arrow {
+      font-size: 1.1rem;
+      color: var(--sage-light);
+      flex-shrink: 0;
+      padding-bottom: 1.6rem;
+    }
+
+    .nn-input-col {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.28rem;
+      cursor: default;
+      padding-bottom: 1.6rem;
+    }
+    .nn-word-chip {
+      border-radius: 20px;
+      padding: 0.22rem 0.75rem;
+      font-weight: 600;
+      font-size: 0.88rem;
+      color: #fff;
+      margin-bottom: 0.15rem;
+      font-family: 'DM Sans', sans-serif;
+      align-self: flex-end;
+      transition: background 0.2s;
+    }
+    .nn-dim-row {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.61rem;
+    }
+    .nn-dim-num {
+      width: 3.3em;
+      text-align: right;
+      opacity: 0.7;
+      color: var(--green-dark);
+    }
+    .nn-dim-bar-bg {
+      width: 34px;
+      height: 5px;
+      background: var(--cream-dark);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .nn-dim-bar { height: 100%; border-radius: 3px; transition: width 0.35s ease; }
+    .nn-dim-bar.pos { background: var(--peach); }
+    .nn-dim-bar.neg { background: var(--red); opacity: 0.7; }
+
+    .nn-output-col {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      min-width: 105px;
+      padding-bottom: 1.6rem;
+    }
+    .nn-pred-item { display: flex; flex-direction: column; gap: 0.12rem; }
+    .nn-pred-label {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--green-dark);
+    }
+    .nn-pred-pct { opacity: 0.5; }
+    .nn-pred-bar-bg {
+      height: 5px;
+      background: var(--cream-dark);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .nn-pred-bar {
+      height: 100%;
+      border-radius: 3px;
+      background: var(--peach);
+      transition: width 0.38s ease;
+    }
+
+    .nn-caption {
+      margin-top: 0.9rem;
+      padding: 0.85rem 1.1rem;
+      background: var(--cream);
+      border-radius: 8px;
+      font-size: 0.88rem;
+      min-height: 2.5rem;
+      opacity: 0.85;
+    }
+
+    /* ── VECTOR TOOLTIP ── */
+    .vec-tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: rgba(251,246,233,0.97);
+      border: 1px solid var(--sage-light);
+      border-radius: 10px;
+      padding: 0.65rem 0.85rem;
+      box-shadow: 0 4px 16px rgba(47,58,38,0.13);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--green-dark);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      z-index: 999;
+      min-width: 160px;
+    }
+    .vec-tooltip.visible { opacity: 1; }
+    .vec-tooltip-word {
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      color: var(--sage);
+      margin-bottom: 0.45rem;
+      text-transform: uppercase;
+    }
+    .vec-row {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin-bottom: 0.22rem;
+    }
+    .vec-row-num {
+      width: 3.2em;
+      text-align: right;
+      opacity: 0.75;
+    }
+    .vec-row-bar-bg {
+      flex: 1;
+      height: 5px;
+      background: var(--cream-dark);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .vec-row-bar {
+      height: 100%;
+      border-radius: 3px;
+    }
+    .vec-row-bar.pos { background: var(--peach); }
+    .vec-row-bar.neg { background: var(--red); opacity: 0.7; }
+    .vec-ellipsis {
+      opacity: 0.4;
+      margin-top: 0.25rem;
+      letter-spacing: 0.1em;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      text-align: center;
+      padding: 3rem 2rem;
+      font-size: 0.78rem;
+      opacity: 0.4;
+      border-top: 1px solid var(--sage-light);
+      margin-top: 2rem;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 640px) {
+      .rlhf-pipeline { grid-template-columns: 1fr; }
+      .pipeline-arrow { transform: rotate(90deg); }
+      .h3h-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="nav-slide-link active" data-slide="0">Intro</a>
+  <a href="#" class="nav-slide-link" data-slide="1">Pre-Training</a>
+  <a href="#" class="nav-slide-link" data-slide="2">Embeddings</a>
+  <a href="#" class="nav-slide-link" data-slide="3">Neural Nets</a>
+  <a href="#" class="nav-slide-link" data-slide="4">Transformers</a>
+  <a href="#" class="nav-slide-link" data-slide="5">RLHF</a>
+</nav>
+
+<div class="slides-outer" id="slides-outer">
+
+  <!-- ═══ SLIDE 0 · HERO ═══ -->
+  <div class="slide active" data-slide="0">
+    <section id="hero" class="section-wrap">
+      <h1>How Large Language<br>Models Work</h1>
+      <div class="scroll-hint">Click Next to begin →</div>
+    </section>
+  </div>
+
+  <!-- ═══ SLIDE 1 · PRE-TRAINING ═══ -->
+  <div class="slide" data-slide="1">
+    <section id="pretraining" class="section-wrap">
+      <div class="section-label">Section 1 · Pre-Training</div>
+      <h2>Learning to Predict</h2>
+      <p>At its core, an LLM is a <strong>next-word predictor</strong>. Given any piece of text, it assigns a probability distribution over every word in its vocabulary. Trained on billions of web pages, books, and code, the model learns the statistical structure of language at massive scale.</p>
+      <p>Each click below picks the top predicted word and extends the sequence.</p>
+
+      <div class="demo-card">
+        <div class="demo-label">Interactive · Next-Word Prediction</div>
+        <div class="sentence-display" id="sentence-display"></div>
+        <div class="prob-title">Top predicted next words</div>
+        <div class="prob-bars" id="prob-bars"></div>
+        <div class="pretrain-btns">
+          <button class="btn" id="btn-next">Pick top word →</button>
+          <button class="btn btn-ghost" id="btn-reset">Reset</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ═══ SLIDE 2 · EMBEDDINGS ═══ -->
+  <div class="slide" data-slide="2">
+    <section id="embeddings" class="section-wrap">
+      <div class="section-label">Section 2 · Vector Embeddings</div>
+      <h2>Meaning as Math</h2>
+      <p>Each word is mapped to a high-dimensional numeric vector called a <strong>word embedding</strong>. The model learns these representations during training so that words with related meanings end up nearby in vector space. Semantic similarity becomes geometric proximity.</p>
+
+      <div class="demo-card">
+        <div class="demo-label">Interactive Map · Word Similarity Space</div>
+        <svg id="embed-svg" viewBox="0 0 700 340"></svg>
+        <div class="embed-legend">
+          <div class="embed-legend-item"><div class="legend-dot" style="background:var(--peach)"></div>Royalty</div>
+          <div class="embed-legend-item"><div class="legend-dot" style="background:var(--sage)"></div>Animals</div>
+          <div class="embed-legend-item"><div class="legend-dot" style="background:var(--red)"></div>Emotions</div>
+          <div class="embed-legend-item"><div class="legend-dot" style="background:var(--blue)"></div>Movement</div>
+        </div>
+        <div class="analogy-box">
+          <span style="opacity:.6;font-size:.82rem;">Famous analogy:</span>
+          <span class="chip">king</span>
+          <span class="op">−</span>
+          <span class="chip">man</span>
+          <span class="op">+</span>
+          <span class="chip">woman</span>
+          <span class="op">≈</span>
+          <span class="result">queen</span>
+          <span style="opacity:.55;font-size:.8rem;">relationships encoded as vector arithmetic</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ═══ SLIDE 3 · NEURAL NETS ═══ -->
+  <div class="slide" data-slide="3">
+    <section id="neural-nets" class="section-wrap">
+      <div class="section-label">Section 3 · Neural Networks</div>
+      <h2>The Building Block</h2>
+      <p>LLMs are a type of <strong>neural network</strong>, a computational model loosely inspired by how neurons in the brain connect and signal each other. A neural network takes some input, passes it through layers of simple mathematical operations called <strong>neurons</strong>, and produces an output.</p>
+      <p>Each neuron takes a weighted sum of its inputs, applies a nonlinear function, and passes the result forward. The network "learns" by adjusting those weights during training so its outputs get closer to the correct answers. Stack enough layers, train on enough data, and the network can learn surprisingly complex patterns.</p>
+      <p>LLMs take this idea to an extreme scale: hundreds of layers, billions of parameters (weights), and training data spanning most of the written internet. The input to each layer is a word embedding, like the ones in Section 2. The specific architecture LLMs use is called the <strong>transformer</strong>, covered in Section 4.</p>
+
+      <div class="demo-card">
+        <div class="demo-label">Visual · Feedforward Neural Network</div>
+        <div class="nn-word-select" id="nn-word-select"></div>
+        <div class="nn-row-wrap">
+          <div class="nn-input-col" id="nn-input-col"></div>
+          <div class="nn-arrow">→</div>
+          <div class="nn-diagram" id="nn-diagram"></div>
+          <div class="nn-arrow">→</div>
+          <div class="nn-output-col" id="nn-output-col"></div>
+        </div>
+        <div class="nn-caption" id="nn-caption">Hover the input word to see its embedding. Click any layer to learn what it does.</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ═══ SLIDE 4 · TRANSFORMERS ═══ -->
+  <div class="slide" data-slide="4">
+    <section id="transformers" class="section-wrap">
+      <div class="section-label">Section 4 · Transformers</div>
+      <h2>Context is Everything</h2>
+      <p>Earlier architectures processed text sequentially, word by word. Transformers process all tokens in parallel using a mechanism called <strong>self-attention</strong>: each token computes a weighted sum over every other token to gather relevant context before making a prediction.</p>
+      <p><strong>Attention</strong> is a learned function that scores how much each word should "look at" every other word in the sequence. A high attention weight between two tokens means the model found their relationship useful for prediction. This lets the same word carry different meanings depending on context. Click any word below to see its attention weights.</p>
+
+      <div class="demo-card">
+        <div class="demo-label">Interactive · Self-Attention Weights</div>
+        <div class="sent-toggle">
+          <button class="tog active" id="tog-0">💰 Financial bank</button>
+          <button class="tog" id="tog-1">🌊 River bank</button>
+        </div>
+        <div class="tokens-wrap" id="tokens-wrap"></div>
+        <div class="attn-svg-wrap"><svg id="attn-svg"></svg></div>
+        <div class="attn-explain" id="attn-explain">Click any word to see which other words it attends to.</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ═══ SLIDE 5 · RLHF ═══ -->
+  <div class="slide" data-slide="5">
+    <section id="rlhf" class="section-wrap">
+      <div class="section-label">Section 5 · RLHF</div>
+      <h2>Making Models Helpful</h2>
+      <p>Pre-training optimizes for text prediction, not for being useful or safe. <strong>Reinforcement Learning from Human Feedback (RLHF)</strong> is a fine-tuning stage where human raters rank model outputs, training a reward model on those preferences, and then using that reward signal to push the model toward responses that are Helpful, Harmless, and Honest.</p>
+
+      <div class="demo-card">
+        <div class="demo-label">Visual · The RLHF Pipeline</div>
+
+        <div class="rlhf-pipeline" id="rlhf-pipeline">
+          <div class="pipeline-step active" data-idx="0">
+            <div class="step-icon">🤖</div>
+            <div class="step-name">Pre-trained Model</div>
+            <div class="step-desc">Knows language, but not how to be helpful or safe</div>
+          </div>
+          <div class="pipeline-arrow">→</div>
+          <div class="pipeline-step" data-idx="1">
+            <div class="step-icon">💬</div>
+            <div class="step-name">Generate Responses</div>
+            <div class="step-desc">Multiple different responses to the same prompt</div>
+          </div>
+          <div class="pipeline-arrow">→</div>
+          <div class="pipeline-step" data-idx="2">
+            <div class="step-icon">👩‍💻</div>
+            <div class="step-name">Humans Rate</div>
+            <div class="step-desc">People rank which responses are best</div>
+          </div>
+          <div class="pipeline-arrow">→</div>
+          <div class="pipeline-step" data-idx="3">
+            <div class="step-icon">✨</div>
+            <div class="step-name">Improved Model</div>
+            <div class="step-desc">Learns to produce preferred, safer responses</div>
+          </div>
+        </div>
+
+        <div class="rlhf-step-btns">
+          <button class="btn" id="btn-rlhf">Walk through the steps →</button>
+          <span class="step-caption" id="rlhf-caption"></span>
+        </div>
+
+        <div class="h3h-grid">
+          <div class="h3h-card helpful">
+            <div class="h3h-title">Helpful</div>
+            <p class="h3h-desc">Gives accurate, useful answers that genuinely address what the user is asking.</p>
+          </div>
+          <div class="h3h-card harmless">
+            <div class="h3h-title">Harmless</div>
+            <p class="h3h-desc">Refuses to assist with dangerous, illegal, or harmful requests.</p>
+          </div>
+          <div class="h3h-card honest">
+            <div class="h3h-title">Honest</div>
+            <p class="h3h-desc">Acknowledges its own uncertainty and avoids making things up.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    <footer>Built for COGS 9 · How LLMs Work</footer>
+  </div>
+
+</div>
+
+<div class="slide-nav-bar">
+  <button class="slide-btn" id="btn-slide-prev" disabled>← Back</button>
+  <div class="slide-dots" id="slide-dots">
+    <button class="slide-dot active" data-slide="0"></button>
+    <button class="slide-dot" data-slide="1"></button>
+    <button class="slide-dot" data-slide="2"></button>
+    <button class="slide-dot" data-slide="3"></button>
+    <button class="slide-dot" data-slide="4"></button>
+    <button class="slide-dot" data-slide="5"></button>
+  </div>
+  <button class="slide-btn" id="btn-slide-next">Next →</button>
+</div>
+
+<script>
+/* ═══════════════════════════════════════
+   SLIDE NAVIGATION
+═══════════════════════════════════════ */
+(function initSlides() {
+  const slides   = document.querySelectorAll('.slide');
+  const dots     = document.querySelectorAll('.slide-dot');
+  const navLinks = document.querySelectorAll('.nav-slide-link');
+  const btnPrev  = document.getElementById('btn-slide-prev');
+  const btnNext  = document.getElementById('btn-slide-next');
+  let current = 0;
+
+  function goTo(idx) {
+    if (idx === current || idx < 0 || idx >= slides.length) return;
+    slides[current].classList.remove('active');
+    slides[current].classList.add('slide-exit');
+    const exiting = slides[current];
+    setTimeout(() => exiting.classList.remove('slide-exit'), 350);
+    current = idx;
+    slides[current].classList.add('active');
+    slides[current].scrollTop = 0;
+    dots.forEach((d, i)     => d.classList.toggle('active', i === current));
+    navLinks.forEach((a, i) => a.classList.toggle('active', i === current));
+    btnPrev.disabled = current === 0;
+    const isLast = current === slides.length - 1;
+    btnNext.disabled = isLast;
+    btnNext.textContent = isLast ? 'Done' : 'Next →';
+  }
+
+  btnPrev.addEventListener('click', () => goTo(current - 1));
+  btnNext.addEventListener('click', () => goTo(current + 1));
+  dots.forEach(d     => d.addEventListener('click', () => goTo(+d.dataset.slide)));
+  navLinks.forEach(a => a.addEventListener('click', e => { e.preventDefault(); goTo(+a.dataset.slide); }));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(current + 1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goTo(current - 1);
+  });
+})();
+
+/* ═══════════════════════════════════════
+   NEURAL NETS
+═══════════════════════════════════════ */
+(function initNN() {
+  const LAYERS = [
+    { label: 'Input',  nodes: 3 },
+    { label: 'Hidden', nodes: 4 },
+    { label: 'Hidden', nodes: 4 },
+    { label: 'Output', nodes: 2 },
+  ];
+  const LAYER_CAPTIONS = [
+    'Each input neuron receives one dimension of the word embedding — three shown here, real models use hundreds.',
+    'Hidden layer 1: each neuron computes a weighted sum of all inputs and applies a nonlinear activation function.',
+    'Hidden layer 2: the representation gets more abstract. The network is learning what features matter for prediction.',
+    'The output neurons produce a probability over the vocabulary. The highest-scoring word is the prediction.',
+  ];
+  const NN_WORDS = {
+    king: {
+      vec: [ 0.84, -0.31,  0.72,  0.15, -0.58,  0.91,  0.43, -0.22],
+      color: '#f1a97a',
+      preds: [{ word: 'queen', prob: 0.73 }, { word: 'throne', prob: 0.45 }, { word: 'prince', prob: 0.38 }],
+    },
+    cat: {
+      vec: [-0.12,  0.74, -0.38,  0.22,  0.81, -0.17,  0.65,  0.48],
+      color: '#91ad94',
+      preds: [{ word: 'dog', prob: 0.71 }, { word: 'sat', prob: 0.58 }, { word: 'purrs', prob: 0.43 }],
+    },
+    run: {
+      vec: [-0.33, -0.41,  0.55,  0.38, -0.22,  0.14,  0.19,  0.72],
+      color: '#5b8fc9',
+      preds: [{ word: 'fast', prob: 0.68 }, { word: 'away', prob: 0.55 }, { word: 'sprint', prob: 0.41 }],
+    },
+  };
+
+  const diagram   = document.getElementById('nn-diagram');
+  const caption   = document.getElementById('nn-caption');
+  const inputCol  = document.getElementById('nn-input-col');
+  const outputCol = document.getElementById('nn-output-col');
+  const selectRow = document.getElementById('nn-word-select');
+  const NODE_GAP = 50, NODE_R = 17, LAYER_GAP = 56;
+
+  let activeLayer = -1;
+  let activeWord  = 'king';
+
+  // Shared tooltip (reuse vec-tooltip already on DOM from embed section, or create one)
+  let tip = document.querySelector('.vec-tooltip') || (() => {
+    const t = document.createElement('div'); t.className = 'vec-tooltip'; document.body.appendChild(t); return t;
+  })();
+
+  function showTip(word, e) {
+    const v = NN_WORDS[word].vec;
+    const rows = v.map(val => {
+      const pct = Math.round(Math.abs(val) * 100);
+      const sign = val >= 0 ? 'pos' : 'neg';
+      return `<div class="vec-row"><span class="vec-row-num">${val.toFixed(2)}</span>
+        <div class="vec-row-bar-bg"><div class="vec-row-bar ${sign}" style="width:${pct}%"></div></div></div>`;
+    }).join('');
+    tip.innerHTML = `<div class="vec-tooltip-word">${word}</div>${rows}<div class="vec-ellipsis">· · · 760 more</div>`;
+    moveTip(e);
+    tip.classList.add('visible');
+  }
+  function moveTip(e) {
+    const off = 14, w = 175;
+    let x = e.clientX + off, y = e.clientY + off;
+    if (x + w > window.innerWidth) x = e.clientX - w - off;
+    if (y + tip.offsetHeight > window.innerHeight) y = e.clientY - tip.offsetHeight - off;
+    tip.style.left = x + 'px'; tip.style.top = y + 'px';
+  }
+  function hideTip() { tip.classList.remove('visible'); }
+
+  // Word selector tabs
+  Object.keys(NN_WORDS).forEach(word => {
+    const btn = document.createElement('button');
+    btn.className = 'vec-tab' + (word === activeWord ? ' active' : '');
+    btn.textContent = word;
+    btn.addEventListener('click', () => {
+      activeWord = word;
+      selectRow.querySelectorAll('.vec-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderInput();
+      renderOutput();
+    });
+    selectRow.appendChild(btn);
+  });
+
+  function renderInput() {
+    const { vec, color } = NN_WORDS[activeWord];
+    inputCol.innerHTML = '';
+
+    const chip = document.createElement('div');
+    chip.className = 'nn-word-chip';
+    chip.textContent = activeWord;
+    chip.style.background = color;
+    inputCol.appendChild(chip);
+
+    // Show first 3 dims (one per input neuron)
+    vec.slice(0, 3).forEach(val => {
+      const row = document.createElement('div');
+      row.className = 'nn-dim-row';
+      const pct = Math.round(Math.abs(val) * 34);
+      const sign = val >= 0 ? 'pos' : 'neg';
+      row.innerHTML = `<span class="nn-dim-num">${val.toFixed(2)}</span>
+        <div class="nn-dim-bar-bg"><div class="nn-dim-bar ${sign}" style="width:${pct}px"></div></div>`;
+      inputCol.appendChild(row);
+    });
+
+    inputCol.style.cursor = 'pointer';
+    inputCol.onmouseenter = e => showTip(activeWord, e);
+    inputCol.onmousemove  = e => moveTip(e);
+    inputCol.onmouseleave = hideTip;
+  }
+
+  function renderOutput() {
+    const { preds, color } = NN_WORDS[activeWord];
+    outputCol.innerHTML = '';
+    preds.forEach(({ word, prob }) => {
+      const item = document.createElement('div');
+      item.className = 'nn-pred-item';
+      item.innerHTML = `<div class="nn-pred-label"><span>${word}</span><span class="nn-pred-pct">${Math.round(prob * 100)}%</span></div>
+        <div class="nn-pred-bar-bg"><div class="nn-pred-bar" style="width:${prob * 100}%;background:${color}"></div></div>`;
+      outputCol.appendChild(item);
+    });
+  }
+
+  function renderDiagram() {
+    diagram.innerHTML = '';
+    LAYERS.forEach((layer, li) => {
+      if (li > 0) {
+        const prev = LAYERS[li - 1];
+        const edgeWrap = document.createElement('div');
+        edgeWrap.className = 'nn-edges';
+        const svgH = Math.max(prev.nodes, layer.nodes) * NODE_GAP + NODE_R * 2;
+        const edgeSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        edgeSvg.setAttribute('viewBox', `0 0 ${LAYER_GAP} ${svgH}`);
+        edgeSvg.style.height = svgH + 'px';
+        const prevY = (svgH - (prev.nodes - 1) * NODE_GAP) / 2 + NODE_R;
+        const currY = (svgH - (layer.nodes - 1) * NODE_GAP) / 2 + NODE_R;
+        for (let pi = 0; pi < prev.nodes; pi++) {
+          for (let ci = 0; ci < layer.nodes; ci++) {
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', 0);          line.setAttribute('y1', prevY + pi * NODE_GAP);
+            line.setAttribute('x2', LAYER_GAP);  line.setAttribute('y2', currY + ci * NODE_GAP);
+            const isActive = activeLayer === li || activeLayer === li - 1;
+            line.setAttribute('stroke', isActive ? '#f1a97a' : '#c8d6c9');
+            line.setAttribute('stroke-width', isActive ? '1.5' : '1');
+            line.setAttribute('opacity', isActive ? '0.7' : '0.4');
+            edgeSvg.appendChild(line);
+          }
+        }
+        edgeWrap.appendChild(edgeSvg);
+        diagram.appendChild(edgeWrap);
+      }
+
+      const col = document.createElement('div');
+      col.className = 'nn-layer';
+      for (let ni = 0; ni < layer.nodes; ni++) {
+        const node = document.createElement('div');
+        node.className = 'nn-node';
+        if (li === activeLayer) node.classList.add(li === LAYERS.length - 1 ? 'output' : 'active');
+        node.style.cursor = 'pointer';
+        node.addEventListener('click', () => {
+          activeLayer = li;
+          caption.textContent = LAYER_CAPTIONS[li];
+          renderDiagram();
+        });
+        col.appendChild(node);
+      }
+      const lbl = document.createElement('div');
+      lbl.className = 'nn-layer-label';
+      lbl.textContent = layer.label;
+      col.appendChild(lbl);
+      diagram.appendChild(col);
+    });
+  }
+
+  renderInput();
+  renderOutput();
+  renderDiagram();
+})();
+
+
+/* ═══════════════════════════════════════
+   PRE-TRAINING
+═══════════════════════════════════════ */
+const STATES = [
+  {
+    text: 'The cat sat on the',
+    preds: [
+      { word: 'mat',   prob: 0.32 },
+      { word: 'floor', prob: 0.21 },
+      { word: 'couch', prob: 0.18 },
+      { word: 'roof',  prob: 0.12 },
+      { word: 'bed',   prob: 0.09 },
+    ]
+  },
+  {
+    text: 'The cat sat on the mat',
+    preds: [
+      { word: 'and',   prob: 0.29 },
+      { word: '.',     prob: 0.25 },
+      { word: 'while', prob: 0.17 },
+      { word: ',',     prob: 0.14 },
+      { word: 'as',    prob: 0.07 },
+    ]
+  },
+  {
+    text: 'The cat sat on the mat and',
+    preds: [
+      { word: 'the',    prob: 0.34 },
+      { word: 'looked', prob: 0.22 },
+      { word: 'purred', prob: 0.18 },
+      { word: 'waited', prob: 0.12 },
+      { word: 'slept',  prob: 0.08 },
+    ]
+  },
+  {
+    text: 'The cat sat on the mat and the',
+    preds: [
+      { word: 'dog',   prob: 0.28 },
+      { word: 'mouse', prob: 0.23 },
+      { word: 'sun',   prob: 0.19 },
+      { word: 'bird',  prob: 0.14 },
+      { word: 'owner', prob: 0.09 },
+    ]
+  },
+  {
+    text: 'The cat sat on the mat and the dog',
+    preds: [
+      { word: 'barked',  prob: 0.38 },
+      { word: 'slept',   prob: 0.22 },
+      { word: 'watched', prob: 0.17 },
+      { word: 'ran',     prob: 0.11 },
+      { word: 'growled', prob: 0.07 },
+    ]
+  },
+  {
+    text: 'The cat sat on the mat and the dog barked',
+    preds: [
+      { word: '.',      prob: 0.43 },
+      { word: 'loudly', prob: 0.27 },
+      { word: 'back',   prob: 0.13 },
+      { word: ',',      prob: 0.09 },
+      { word: 'again',  prob: 0.05 },
+    ]
+  },
+];
+
+let ptState = 0;
+
+function renderPT(idx) {
+  const s = STATES[idx];
+  const prev = idx > 0 ? STATES[idx - 1].text : null;
+
+  // Build display: highlight the new word in peach
+  let displayHTML = '';
+  if (prev) {
+    const newWord = s.text.slice(prev.length).trim();
+    displayHTML = prev + ' <span class="new-word">' + newWord + '</span>';
+  } else {
+    displayHTML = s.text;
+  }
+  displayHTML += ' <span class="cursor"></span>';
+  document.getElementById('sentence-display').innerHTML = displayHTML;
+
+  const bars = document.getElementById('prob-bars');
+  bars.innerHTML = s.preds.map((p, i) => `
+    <div class="prob-row">
+      <div class="prob-word">${p.word}</div>
+      <div class="prob-bar-bg">
+        <div class="prob-fill ${i === 0 ? 'top' : i === 1 ? 'second' : ''}"
+             style="width:${p.prob * 100}%">
+          <span class="prob-pct">${Math.round(p.prob * 100)}%</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+document.getElementById('btn-next').addEventListener('click', () => {
+  if (ptState < STATES.length - 1) {
+    ptState++;
+    renderPT(ptState);
+    if (ptState === STATES.length - 1) {
+      document.getElementById('btn-next').textContent = 'Done!';
+      document.getElementById('btn-next').disabled = true;
+    }
+  }
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  ptState = 0;
+  document.getElementById('btn-next').textContent = 'Pick top word →';
+  document.getElementById('btn-next').disabled = false;
+  renderPT(0);
+});
+
+renderPT(0);
+
+
+/* ═══════════════════════════════════════
+   EMBEDDINGS
+═══════════════════════════════════════ */
+const WORDS = [
+  // Royalty — top-left
+  { w: 'king',    x: 110, y:  60, g: 'royalty', c: '#f1a97a' },
+  { w: 'queen',   x: 185, y:  80, g: 'royalty', c: '#f1a97a' },
+  { w: 'prince',  x: 130, y: 125, g: 'royalty', c: '#f1a97a' },
+  { w: 'crown',   x: 195, y: 130, g: 'royalty', c: '#f1a97a' },
+  { w: 'throne',  x: 155, y: 170, g: 'royalty', c: '#f1a97a' },
+
+  // Animals — top-right
+  { w: 'cat',    x: 520, y:  55, g: 'animals', c: '#91ad94' },
+  { w: 'dog',    x: 610, y:  70, g: 'animals', c: '#91ad94' },
+  { w: 'kitten', x: 545, y: 115, g: 'animals', c: '#91ad94' },
+  { w: 'puppy',  x: 625, y: 120, g: 'animals', c: '#91ad94' },
+  { w: 'pet',    x: 580, y: 160, g: 'animals', c: '#91ad94' },
+
+  // Emotions — bottom-left
+  { w: 'happy', x: 100, y: 240, g: 'emotions', c: '#d85455' },
+  { w: 'joy',   x: 175, y: 265, g: 'emotions', c: '#d85455' },
+  { w: 'sad',   x: 120, y: 300, g: 'emotions', c: '#d85455' },
+  { w: 'angry', x: 210, y: 295, g: 'emotions', c: '#d85455' },
+  { w: 'fear',  x: 165, y: 315, g: 'emotions', c: '#d85455' },
+
+  // Movement — bottom-right
+  { w: 'run',    x: 520, y: 245, g: 'movement', c: '#5b8fc9' },
+  { w: 'sprint', x: 605, y: 250, g: 'movement', c: '#5b8fc9' },
+  { w: 'walk',   x: 535, y: 300, g: 'movement', c: '#5b8fc9' },
+  { w: 'jog',    x: 615, y: 295, g: 'movement', c: '#5b8fc9' },
+  { w: 'leap',   x: 570, y: 320, g: 'movement', c: '#5b8fc9' },
+];
+
+// Illustrative vectors — 8 dims shown, scaled to look plausible
+const WORD_VECS = {
+  king:   [ 0.84, -0.31,  0.72,  0.15, -0.58,  0.91,  0.43, -0.22],
+  queen:  [ 0.79, -0.28,  0.68,  0.63, -0.54,  0.88,  0.40, -0.19],
+  prince: [ 0.81, -0.29,  0.70,  0.11, -0.55,  0.89,  0.38, -0.20],
+  crown:  [ 0.75, -0.18,  0.61,  0.09, -0.47,  0.80,  0.31, -0.14],
+  throne: [ 0.77, -0.22,  0.64,  0.08, -0.50,  0.83,  0.34, -0.17],
+  cat:    [-0.12,  0.74, -0.38,  0.22,  0.81, -0.17,  0.65,  0.48],
+  dog:    [-0.09,  0.71, -0.34,  0.19,  0.78, -0.14,  0.61,  0.44],
+  kitten: [-0.14,  0.76, -0.40,  0.24,  0.83, -0.19,  0.67,  0.50],
+  puppy:  [-0.11,  0.73, -0.36,  0.21,  0.80, -0.16,  0.63,  0.46],
+  pet:    [-0.08,  0.68, -0.30,  0.17,  0.75, -0.11,  0.58,  0.41],
+  happy:  [ 0.22,  0.14,  0.18, -0.72,  0.11,  0.09, -0.65,  0.31],
+  joy:    [ 0.19,  0.11,  0.15, -0.69,  0.09,  0.06, -0.62,  0.28],
+  sad:    [ 0.24,  0.17,  0.20, -0.74,  0.13,  0.11, -0.67,  0.33],
+  angry:  [ 0.27,  0.20,  0.23, -0.77,  0.16,  0.14, -0.70,  0.36],
+  fear:   [ 0.21,  0.13,  0.17, -0.71,  0.10,  0.08, -0.64,  0.30],
+  run:    [-0.33, -0.41,  0.55,  0.38, -0.22,  0.14,  0.19,  0.72],
+  sprint: [-0.36, -0.44,  0.58,  0.41, -0.25,  0.17,  0.22,  0.75],
+  walk:   [-0.28, -0.36,  0.50,  0.33, -0.17,  0.09,  0.14,  0.67],
+  jog:    [-0.31, -0.39,  0.53,  0.36, -0.20,  0.12,  0.17,  0.70],
+  leap:   [-0.34, -0.42,  0.56,  0.39, -0.23,  0.15,  0.20,  0.73],
+};
+
+function initEmbed() {
+  const svg = document.getElementById('embed-svg');
+
+  // Create tooltip element
+  const tip = document.createElement('div');
+  tip.className = 'vec-tooltip';
+  document.body.appendChild(tip);
+
+  // Faint cluster halos
+  const clusters = [
+    { cx: 155, cy: 115, rx: 105, ry: 85, c: '#f1a97a' },
+    { cx: 575, cy: 110, rx: 90,  ry: 80, c: '#91ad94' },
+    { cx: 160, cy: 280, rx: 95,  ry: 65, c: '#d85455' },
+    { cx: 570, cy: 285, rx: 95,  ry: 65, c: '#5b8fc9' },
+  ];
+  clusters.forEach(cl => {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+    el.setAttribute('cx', cl.cx); el.setAttribute('cy', cl.cy);
+    el.setAttribute('rx', cl.rx); el.setAttribute('ry', cl.ry);
+    el.setAttribute('fill', cl.c); el.setAttribute('opacity', '0.07');
+    svg.appendChild(el);
+  });
+
+  // Render word nodes
+  WORDS.forEach(w => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.classList.add('word-node');
+    g.dataset.word = w.w;
+    g.dataset.group = w.g;
+    g.style.cursor = 'pointer';
+
+    const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circ.setAttribute('cx', w.x); circ.setAttribute('cy', w.y); circ.setAttribute('r', 7);
+    circ.setAttribute('fill', w.c); circ.setAttribute('opacity', '0.9');
+
+    const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    txt.setAttribute('x', w.x + 11); txt.setAttribute('y', w.y + 4);
+    txt.setAttribute('font-size', '12'); txt.setAttribute('font-family', 'DM Sans, sans-serif');
+    txt.setAttribute('fill', '#2f3a26');
+    txt.textContent = w.w;
+
+    g.appendChild(circ); g.appendChild(txt);
+    svg.appendChild(g);
+
+    g.addEventListener('mouseenter', (e) => {
+      onEmbedHover(w, svg);
+      showVecTip(w.w, e);
+    });
+    g.addEventListener('mousemove', (e) => positionTip(tip, e));
+    g.addEventListener('mouseleave', () => {
+      clearEmbed(svg);
+      tip.classList.remove('visible');
+    });
+  });
+
+  function showVecTip(word, e) {
+    const v = WORD_VECS[word];
+    if (!v) return;
+    const rows = v.map(val => {
+      const pct = Math.round(Math.abs(val) * 100);
+      const sign = val >= 0 ? 'pos' : 'neg';
+      return `<div class="vec-row">
+        <span class="vec-row-num">${val.toFixed(2)}</span>
+        <div class="vec-row-bar-bg">
+          <div class="vec-row-bar ${sign}" style="width:${pct}%"></div>
+        </div>
+      </div>`;
+    }).join('');
+    tip.innerHTML = `<div class="vec-tooltip-word">${word}</div>${rows}<div class="vec-ellipsis">· · · 760 more</div>`;
+    positionTip(tip, e);
+    tip.classList.add('visible');
+  }
+
+  function positionTip(el, e) {
+    const offset = 14;
+    let x = e.clientX + offset;
+    let y = e.clientY + offset;
+    if (x + 180 > window.innerWidth)  x = e.clientX - 180 - offset;
+    if (y + el.offsetHeight > window.innerHeight) y = e.clientY - el.offsetHeight - offset;
+    el.style.left = x + 'px';
+    el.style.top  = y + 'px';
+  }
+}
+
+function onEmbedHover(hovered, svg) {
+  clearEmbed(svg);
+  const peers = WORDS.filter(o => o.g === hovered.g && o.w !== hovered.w);
+  peers.forEach(p => {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', hovered.x); line.setAttribute('y1', hovered.y);
+    line.setAttribute('x2', p.x);       line.setAttribute('y2', p.y);
+    line.setAttribute('stroke', hovered.c);
+    line.setAttribute('stroke-width', '1.5');
+    line.setAttribute('stroke-dasharray', '5,3');
+    line.setAttribute('opacity', '0.55');
+    line.classList.add('hl-line');
+    svg.insertBefore(line, svg.firstChild.nextSibling);
+  });
+  svg.querySelectorAll('.word-node').forEach(el => {
+    const inGroup = el.dataset.group === hovered.g;
+    el.style.opacity = inGroup ? '1' : '0.15';
+  });
+}
+
+function clearEmbed(svg) {
+  svg.querySelectorAll('.hl-line').forEach(e => e.remove());
+  svg.querySelectorAll('.word-node').forEach(e => e.style.opacity = '1');
+}
+
+initEmbed();
+
+
+/* ═══════════════════════════════════════
+   TRANSFORMERS
+═══════════════════════════════════════ */
+const SENTENCES = [
+  {
+    tokens: ['I', 'went', 'to', 'the', 'bank', 'to', 'get', 'money'],
+    attn: {
+      'bank':  { 'money': 0.9, 'get': 0.6, 'went': 0.35 },
+      'money': { 'bank': 0.88, 'get': 0.5, 'to': 0.3 },
+      'I':     { 'went': 0.82, 'to': 0.3 },
+      'went':  { 'I': 0.72, 'to': 0.5, 'bank': 0.38 },
+    },
+    explain: {
+      'bank':  '"bank" attends strongly to "money": context disambiguates this as a financial institution, not a riverbank.',
+      'money': '"money" confirms the financial reading, attending strongly back to "bank".',
+      'I':     '"I" is the subject. It attends most to "went", the verb it controls.',
+      'went':  '"went" links the subject "I" to the destination "bank".',
+    },
+    default: 'Try clicking "bank" to see which tokens receive high attention weight.'
+  },
+  {
+    tokens: ['I', 'walked', 'along', 'the', 'bank', 'of', 'the', 'river'],
+    attn: {
+      'bank':   { 'river': 0.93, 'along': 0.55, 'walked': 0.32 },
+      'river':  { 'bank': 0.91, 'along': 0.42 },
+      'I':      { 'walked': 0.84, 'along': 0.28 },
+      'walked': { 'I': 0.74, 'along': 0.52, 'bank': 0.28 },
+    },
+    explain: {
+      'bank':   '"bank" now attends strongly to "river". Same word, completely different representation because of context.',
+      'river':  '"river" resolves the ambiguity, attending strongly back to "bank".',
+      'I':      '"I" attends to "walked", the same subject-verb pattern as in Sentence A.',
+      'walked': '"walked" links the subject "I" to the location "bank".',
+    },
+    default: 'Try clicking "bank" again. Notice how different the attention pattern is.'
+  },
+];
+
+let curSent = 0;
+let curToken = null;
+
+function renderTransformer(sentIdx, focusTok) {
+  const s = SENTENCES[sentIdx];
+  const wrap = document.getElementById('tokens-wrap');
+  const explain = document.getElementById('attn-explain');
+
+  wrap.innerHTML = s.tokens.map(tok => {
+    let cls = 'token';
+    if (focusTok) {
+      const weights = s.attn[focusTok] || {};
+      if (tok === focusTok)         cls += ' focus';
+      else if (weights[tok] > 0.4)  cls += ' attending';
+      else                          cls += ' dim';
+    }
+    return `<div class="${cls}" data-tok="${tok}">${tok}</div>`;
+  }).join('');
+
+  wrap.querySelectorAll('.token').forEach(el => {
+    el.addEventListener('click', () => {
+      curToken = el.dataset.tok;
+      renderTransformer(curSent, curToken);
+    });
+  });
+
+  explain.textContent = focusTok
+    ? (s.explain[focusTok] || `"${focusTok}" has no notable attention pattern.`)
+    : s.default;
+
+  drawAttentionArcs(sentIdx, focusTok);
+}
+
+function drawAttentionArcs(sentIdx, focusTok) {
+  const svg = document.getElementById('attn-svg');
+  svg.innerHTML = '';
+  if (!focusTok) return;
+
+  const s = SENTENCES[sentIdx];
+  const weights = s.attn[focusTok] || {};
+  if (!Object.keys(weights).length) return;
+
+  const tokenEls = document.querySelectorAll('#tokens-wrap .token');
+  const svgRect  = svg.getBoundingClientRect();
+  const wrapRect = document.getElementById('tokens-wrap').getBoundingClientRect();
+
+  const getCenter = (el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2 - svgRect.left, y: 0 };
+  };
+
+  tokenEls.forEach(el => {
+    const tok = el.dataset.tok;
+    const w   = weights[tok];
+    if (!w || tok === focusTok) return;
+
+    const focusEl = [...tokenEls].find(e => e.dataset.tok === focusTok);
+    if (!focusEl) return;
+
+    const p1 = getCenter(focusEl);
+    const p2 = getCenter(el);
+    const mx = (p1.x + p2.x) / 2;
+    const cy = 20 + Math.abs(p1.x - p2.x) * 0.18;
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M ${p1.x} 5 Q ${mx} ${cy} ${p2.x} 5`);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', '#f1a97a');
+    path.setAttribute('stroke-width', (w * 3).toFixed(1));
+    path.setAttribute('opacity', (w * 0.85).toFixed(2));
+    path.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(path);
+  });
+}
+
+document.getElementById('tog-0').addEventListener('click', () => {
+  curSent = 0; curToken = null;
+  document.getElementById('tog-0').classList.add('active');
+  document.getElementById('tog-1').classList.remove('active');
+  renderTransformer(0, null);
+});
+document.getElementById('tog-1').addEventListener('click', () => {
+  curSent = 1; curToken = null;
+  document.getElementById('tog-0').classList.remove('active');
+  document.getElementById('tog-1').classList.add('active');
+  renderTransformer(1, null);
+});
+
+renderTransformer(0, null);
+window.addEventListener('resize', () => { if (curToken) renderTransformer(curSent, curToken); });
+
+
+/* ═══════════════════════════════════════
+   RLHF
+═══════════════════════════════════════ */
+const CAPTIONS = [
+  'A model trained on raw internet text knows language, but it has no sense of how to be helpful.',
+  'Given a prompt, the model generates several candidate responses.',
+  'Human labelers rank the responses from best to worst.',
+  'The model is fine-tuned to produce responses more like the ones humans preferred.',
+];
+
+let rlhfIdx = 0;
+
+document.getElementById('btn-rlhf').addEventListener('click', () => {
+  const steps = document.querySelectorAll('.pipeline-step');
+  const btn   = document.getElementById('btn-rlhf');
+  const cap   = document.getElementById('rlhf-caption');
+
+  steps.forEach(s => s.classList.remove('active'));
+
+  if (rlhfIdx >= steps.length - 1) {
+    rlhfIdx = 0;
+    btn.textContent = 'Walk through the steps →';
+    cap.textContent = '';
+  } else {
+    rlhfIdx++;
+    btn.textContent = rlhfIdx === steps.length - 1 ? '↺ Start over' : 'Next step →';
+    cap.textContent = CAPTIONS[rlhfIdx];
+  }
+
+  steps[rlhfIdx].classList.add('active');
+  cap.textContent = rlhfIdx === 0 ? '' : CAPTIONS[rlhfIdx];
+});
+</script>
+</body>
+</html>
